@@ -11,7 +11,32 @@ def box_contains_point(box, point):
     """
     return box[0] <= point[0] <= box[1] and box[2] <= point[1] <= box[3]
 
-def breadth_first_search(frontier, neighbors, destination_box, boxes):
+def graph_cost(current, next_box):
+    """
+    Calculates the cost of moving from the current box to the next box.
+
+    Args:
+        current: current box
+        next_box: next box
+
+    Returns:
+        Cost of moving from current to next_box
+    """
+    # You need to implement this based on your problem's requirements
+    # For example, it might involve calculating the distance between the boxes
+    # or some other metric relevant to your problem.
+
+    """ get the distance between the two boxes """
+    x1 = (current[0] + current[1]) / 2
+    y1 = (current[2] + current[3]) / 2
+    x2 = (next_box[0] + next_box[1]) / 2
+    y2 = (next_box[2] + next_box[3]) / 2
+
+    cost = ((x1 - x2)**2 + (y1 - y2)**2)**0.5
+
+    return cost
+
+def breadth_first_search(neighbors, source_box, destination_box, boxes):
     """
     Performs breadth-first search to find a path.
 
@@ -25,6 +50,10 @@ def breadth_first_search(frontier, neighbors, destination_box, boxes):
         True if a path is found, False otherwise
     """
     path_found = False
+    frontier = []
+
+    if source_box:
+        frontier.append(source_box)
 
     while frontier:
         current = frontier.pop(0)
@@ -36,6 +65,44 @@ def breadth_first_search(frontier, neighbors, destination_box, boxes):
         for next_box in neighbors[current]:
             if next_box not in boxes:
                 frontier.append(next_box)
+                boxes[next_box] = current
+
+    return path_found
+
+def dijkstra(neighbors, source_box, destination_box, boxes):
+    """
+    Performs Dijkstra's algorithm to find a path.
+
+    Args:
+        frontier: frontier for Dijkstra's algorithm
+        neighbors: adjacency information for the mesh
+        destination_box: box containing the destination point
+        boxes: dictionary to store explored boxes
+
+    Returns:
+        True if a path is found, False otherwise
+    """
+    path_found = False
+    frontier = {}
+    cost_so_far = {}
+
+    if source_box:
+        frontier[source_box] = 0
+        cost_so_far[source_box] = 0
+
+    while frontier:
+        current = frontier.popitem()[0]
+
+        if current == destination_box:
+            path_found = True
+            break
+
+        for next_box in neighbors[current]:
+            new_cost = cost_so_far[current] + graph_cost(current, next_box)
+            if next_box not in cost_so_far or new_cost < cost_so_far[next_box]:
+                cost_so_far[next_box] = new_cost
+                priority = new_cost
+                frontier[next_box] = priority
                 boxes[next_box] = current
 
     return path_found
@@ -58,7 +125,6 @@ def find_path (source_point, destination_point, mesh):
 
     path = []
     boxes = {}
-    frontier = []
     detail_points = {}
     source_box = None
     destination_box = None
@@ -66,7 +132,6 @@ def find_path (source_point, destination_point, mesh):
     for box in mesh["boxes"]:
         if box_contains_point(box, source_point):
             source_box = box
-            frontier.append(source_box)
             boxes[source_box] = None
             detail_points[source_box] = source_point
             print("Source Box " + str(source_box))
@@ -77,7 +142,11 @@ def find_path (source_point, destination_point, mesh):
 
     neighbors = mesh["adj"]
 
-    if breadth_first_search(frontier, neighbors, destination_box, boxes):
+    """
+    Run search algorithm
+    """
+
+    if breadth_first_search(neighbors, source_box, destination_box, boxes):
         print("Path found")
     else:
         print("No path found")
