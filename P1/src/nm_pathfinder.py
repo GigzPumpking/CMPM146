@@ -1,3 +1,6 @@
+from math import inf, sqrt
+from heapq import heappop, heappush
+
 def box_contains_point(box, point):
     """
     Checks if a given box contains a point.
@@ -11,32 +14,52 @@ def box_contains_point(box, point):
     """
     return box[0] <= point[0] <= box[1] and box[2] <= point[1] <= box[3]
 
-def graph_cost(current, next_box):
+def calculate_detail_point(detail_points, current_box, next_box):
     """
-    Calculates the cost of moving from the current box to the next box.
+    Calculates the detail point for a given box.
 
     Args:
-        current: current box
-        next_box: next box
+        detail_points: dictionary containing detail points for each box
+        current_box: box to be checked
+        next_box: box to be checked
 
     Returns:
-        Cost of moving from current to next_box
+        detail point for the given box
     """
-    # You need to implement this based on your problem's requirements
-    # For example, it might involve calculating the distance between the boxes
-    # or some other metric relevant to your problem.
+    xRange = [max(current_box[0], next_box[0]), min(current_box[1], next_box[1])]
+    yRange = [max(current_box[2], next_box[2]), min(current_box[3], next_box[3])]
 
-    """ get the distance between the two boxes """
-    x1 = (current[0] + current[1]) / 2
-    y1 = (current[2] + current[3]) / 2
-    x2 = (next_box[0] + next_box[1]) / 2
-    y2 = (next_box[2] + next_box[3]) / 2
+    newX = detail_points[current_box][0]
+    newY = detail_points[current_box][1]
 
-    cost = ((x1 - x2)**2 + (y1 - y2)**2)**0.5
+    if (detail_points[current_box][0] < xRange[0]):
+        newX = min(xRange)
+    elif (detail_points[current_box][0] > xRange[1]):
+        newX = max(xRange)
 
-    return cost
+    if (detail_points[current_box][1] < yRange[0]):
+        newY = min(yRange)
+    elif (detail_points[current_box][1] > yRange[1]):
+        newY = max(yRange)
 
-def breadth_first_search(neighbors, source_box, destination_box, boxes):
+    return (newX, newY)
+
+def calculate_distance(detail_points, current_box, next_box):
+    """
+    Calculates the distance between two boxes' detail points.
+    
+    Args:
+        detail_points: dictionary containing detail points for each box
+        current_box: first box
+        next_box: second box
+        
+        Returns:
+            distance between the two boxes
+    """
+
+    return sqrt((current_box[0] - next_box[0])**2 + (current_box[2] - next_box[2])**2)
+
+def breadth_first_search(detail_points, neighbors, source_box, destination_box, boxes):
     """
     Performs breadth-first search to find a path.
 
@@ -64,12 +87,13 @@ def breadth_first_search(neighbors, source_box, destination_box, boxes):
 
         for next_box in neighbors[current]:
             if next_box not in boxes:
+                detail_points[next_box] = calculate_detail_point(detail_points, current, next_box)
                 frontier.append(next_box)
                 boxes[next_box] = current
 
     return path_found
 
-def dijkstra(neighbors, source_box, destination_box, boxes):
+def dijkstra(detail_points, neighbors, source_box, destination_box, boxes):
     """
     Performs Dijkstra's algorithm to find a path.
 
@@ -83,26 +107,65 @@ def dijkstra(neighbors, source_box, destination_box, boxes):
         True if a path is found, False otherwise
     """
     path_found = False
-    frontier = {}
+    frontier = []
     cost_so_far = {}
 
     if source_box:
-        frontier[source_box] = 0
+        heappush(frontier, (0, source_box))
         cost_so_far[source_box] = 0
 
     while frontier:
-        current = frontier.popitem()[0]
+        priority, current = heappop(frontier)
 
         if current == destination_box:
             path_found = True
             break
 
         for next_box in neighbors[current]:
-            new_cost = cost_so_far[current] + graph_cost(current, next_box)
+            new_cost = priority + calculate_distance(detail_points, current, next_box)
             if next_box not in cost_so_far or new_cost < cost_so_far[next_box]:
+                detail_points[next_box] = calculate_detail_point(detail_points, current, next_box)
                 cost_so_far[next_box] = new_cost
-                priority = new_cost
-                frontier[next_box] = priority
+                heappush(frontier, (new_cost, next_box))
+                boxes[next_box] = current
+
+    return path_found
+
+def astar(detail_points, neighbors, source_box, destination_box, boxes):
+    """
+    Performs A* search to find a path.
+
+    Args:
+        frontier: frontier for A* search
+        neighbors: adjacency information for the mesh
+        destination_box: box containing the destination point
+        boxes: dictionary to store explored boxes
+
+    Returns:
+        True if a path is found, False otherwise
+    """
+    path_found = False
+    frontier = []
+    cost_so_far = {}
+
+    if source_box:
+        heappush(frontier, (0, source_box))
+        cost_so_far[source_box] = 0
+
+    while frontier:
+        priority, current = heappop(frontier)
+
+        if current == destination_box:
+            path_found = True
+            break
+
+        for next_box in neighbors[current]:
+            new_cost = cost_so_far[current]
+            if next_box not in cost_so_far or new_cost < cost_so_far[next_box]:
+                detail_points[next_box] = calculate_detail_point(detail_points, current, next_box)
+                cost_so_far[next_box] = new_cost
+                priority = new_cost + calculate_distance(detail_points, current, next_box)
+                heappush(frontier, (priority, next_box))
                 boxes[next_box] = current
 
     return path_found
@@ -146,7 +209,7 @@ def find_path (source_point, destination_point, mesh):
     Run search algorithm
     """
 
-    if breadth_first_search(neighbors, source_box, destination_box, boxes):
+    if astar(detail_points, neighbors, source_box, destination_box, boxes):
         print("Path found")
     else:
         print("No path found")
@@ -157,33 +220,11 @@ def find_path (source_point, destination_point, mesh):
     """
 
     path.append(destination_point)
-    detail_points[destination_box] = destination_point
-    came_from = boxes[destination_box]
-    prev_box = destination_box
-    while came_from is not None:
-        xRange = [max(came_from[0], prev_box[0]), min(came_from[1], prev_box[1])]
-        yRange = [max(came_from[2], prev_box[2]), min(came_from[3], prev_box[3])]
-        
-        newX = detail_points[prev_box][0]
-        newY = detail_points[prev_box][1]
-
-        if (detail_points[prev_box][0] < xRange[0]):
-            newX = xRange[0]
-        elif (detail_points[prev_box][0] > xRange[1]):
-            newX = xRange[1]
-        
-        if (detail_points[prev_box][1] < yRange[0]):
-            newY = yRange[0]
-        elif (detail_points[prev_box][1] > yRange[1]):
-            newY = yRange[1]
-
-        detail_points[came_from] = (newX, newY)
-
-        path.append(detail_points[came_from])
-        prev_box = came_from
-        came_from = boxes[came_from]
-
+    path.append(detail_points[destination_box])
+    current_box = boxes[destination_box]
+    while current_box is not source_box:
+        path.append(detail_points[current_box])
+        current_box = boxes[current_box]
     path.append(source_point)
-    path.reverse()
 
     return path, boxes.keys()
