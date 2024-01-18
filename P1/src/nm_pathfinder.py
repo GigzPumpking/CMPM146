@@ -14,6 +14,28 @@ def box_contains_point(box, point):
     """
     return box[0] <= point[0] <= box[1] and box[2] <= point[1] <= box[3]
 
+def reconstruct_path(boxes, detail_points, destination_box, destination_point):
+    """
+    Reconstructs the path from source to destination.
+
+    Args:
+        boxes: dictionary containing explored boxes
+        detail_points: dictionary containing detail points for each box
+        destination_box: box containing the destination point
+
+    Returns:
+        A list of points from source to destination
+    """
+    path = []
+    path.append(destination_point)
+    path.append(detail_points[destination_box])
+    current_box = boxes[destination_box]
+    while current_box is not None:
+        path.append(detail_points[current_box])
+        current_box = boxes[current_box]
+
+    return path
+
 def calculate_detail_point(detail_points, current_box, next_box):
     """
     Calculates the detail point for a given box.
@@ -64,7 +86,7 @@ def euclidean_distance(source_point, destination_point):
     x2, y2 = destination_point
     return sqrt((x2 - x1)**2 + (y2 - y1)**2)   
 
-def breadth_first_search(detail_points, neighbors, source_box, destination_box, boxes):
+def breadth_first_search(detail_points, neighbors, source_box, destination_box, destination_point, boxes):
     """
     Performs breadth-first search to find a path.
 
@@ -79,6 +101,7 @@ def breadth_first_search(detail_points, neighbors, source_box, destination_box, 
     """
     path_found = False
     frontier = []
+    path = []
 
     if source_box:
         frontier.append(source_box)
@@ -88,7 +111,8 @@ def breadth_first_search(detail_points, neighbors, source_box, destination_box, 
 
         if current == destination_box:
             path_found = True
-            break
+            reconstruct_path(boxes, detail_points, destination_box, destination_point)
+            return path_found, path
 
         for next_box in neighbors[current]:
             if next_box not in boxes:
@@ -96,9 +120,9 @@ def breadth_first_search(detail_points, neighbors, source_box, destination_box, 
                 frontier.append(next_box)
                 boxes[next_box] = current
 
-    return path_found
+    return path_found, path
 
-def dijkstra(detail_points, neighbors, source_box, destination_box, boxes):
+def dijkstra(detail_points, neighbors, source_box, destination_box, destination_point, boxes):
     """
     Performs Dijkstra's algorithm to find a path.
 
@@ -114,6 +138,7 @@ def dijkstra(detail_points, neighbors, source_box, destination_box, boxes):
     path_found = False
     frontier = []
     cost_so_far = {}
+    path = []
 
     if source_box:
         heappush(frontier, (0, source_box))
@@ -124,7 +149,8 @@ def dijkstra(detail_points, neighbors, source_box, destination_box, boxes):
 
         if current == destination_box:
             path_found = True
-            break
+            path = reconstruct_path(boxes, detail_points, destination_box, destination_point)
+            return path_found, path
 
         for next_box in neighbors[current]:
             new_cost = priority + calculate_distance(current, next_box)
@@ -134,9 +160,9 @@ def dijkstra(detail_points, neighbors, source_box, destination_box, boxes):
                 heappush(frontier, (new_cost, next_box))
                 boxes[next_box] = current
 
-    return path_found
+    return path_found, path
 
-def astar(detail_points, neighbors, source_box, destination_box, boxes):
+def astar(detail_points, neighbors, source_box, destination_box, destination_point, boxes):
     """
     Performs A* search to find a path.
 
@@ -152,6 +178,7 @@ def astar(detail_points, neighbors, source_box, destination_box, boxes):
     path_found = False
     frontier = []
     cost_so_far = {}
+    path = []
 
     if source_box:
         heappush(frontier, (0, source_box))
@@ -162,7 +189,8 @@ def astar(detail_points, neighbors, source_box, destination_box, boxes):
 
         if current == destination_box:
             path_found = True
-            return path_found
+            path = reconstruct_path(boxes, detail_points, destination_box, destination_point)
+            return path_found, path
 
         for next_box in neighbors[current]:
             new_cost = cost_so_far[current]
@@ -173,9 +201,9 @@ def astar(detail_points, neighbors, source_box, destination_box, boxes):
                 heappush(frontier, (priority, next_box))
                 boxes[next_box] = current
 
-    return path_found
+    return path_found, path
 
-def bidirectional_astar(detail_points, neighbors, source_box, destination_box, boxes):
+def bidirectional_astar(neighbors, source_box, source_point, destination_box, destination_point, boxes):
     """
     Performs bidirectional A* search to find a path.
 
@@ -190,29 +218,78 @@ def bidirectional_astar(detail_points, neighbors, source_box, destination_box, b
     """
     path_found = False
     frontier = []
-    cost_so_far = {}
+    path = []
+
+    f_paths = {}
+    b_paths = {}
+
+    f_cost_so_far = {}
+    b_cost_so_far = {}
+
+    f_detail_points = {}
+    b_detail_points = {}
 
     if source_box:
-        heappush(frontier, (0, source_box))
-        cost_so_far[source_box] = 0
+        f_paths[source_box] = None
+        f_cost_so_far[source_box] = 0
+        f_detail_points[source_box] = source_point
+        heappush(frontier, (0, source_box, 1))
+
+    if destination_box:
+        b_paths[destination_box] = None
+        b_cost_so_far[destination_box] = 0
+        b_detail_points[destination_box] = destination_point
+        heappush(frontier, (0, destination_box, 0))
 
     while frontier:
-        priority, current = heappop(frontier)
+        priority, current, current_destination = heappop(frontier)
 
-        if current == destination_box:
+        if (current in f_paths) and (current in b_paths):
             path_found = True
-            return path_found
+            current_box = current
+            
+            # Add the forward path
+            while current_box is not None:
+                path.insert(0, f_detail_points[current_box])
+                current_box = f_paths[current_box]
+
+            # Add the backward path in reverse order
+            current_box = current
+            while current_box is not None:
+                path.append(b_detail_points[current_box])
+                current_box = b_paths[current_box]
+
+            f_paths.update(b_paths)
+            
+            return path_found, path, f_paths
 
         for next_box in neighbors[current]:
-            new_cost = cost_so_far[current]
-            if next_box not in cost_so_far or new_cost < cost_so_far[next_box]:
-                detail_points[next_box] = calculate_detail_point(detail_points, current, next_box)
-                cost_so_far[next_box] = new_cost
-                priority = new_cost + euclidean_distance(detail_points[next_box], detail_points[destination_box])
-                heappush(frontier, (priority, next_box))
-                boxes[next_box] = current
+            new_cost = f_cost_so_far[current] if current_destination == 1 else b_cost_so_far[current]
+            cost_so_far = 0
+            paths = 0
+            if current_destination == 1:
+                paths = f_paths
+                cost_so_far = f_cost_so_far
+            else:
+                paths = b_paths
+                cost_so_far = b_cost_so_far
 
-    return path_found
+            if next_box not in cost_so_far or new_cost < cost_so_far[next_box]:
+                cost_so_far[next_box] = new_cost  # update the cost
+                priority = 0
+
+                # setting detail points
+                if current_destination == 1:
+                    f_detail_points[next_box] = calculate_detail_point(f_detail_points, current, next_box)
+                    priority = new_cost + euclidean_distance(f_detail_points[next_box], destination_point)
+                else:           
+                    b_detail_points[next_box] = calculate_detail_point(b_detail_points, current, next_box)
+                    priority = new_cost + euclidean_distance(b_detail_points[next_box], source_point)
+                heappush(frontier, (priority, next_box, current_destination))
+                paths[next_box] = current
+
+    f_paths.update(b_paths)
+    return path_found, path, f_paths
 
 def find_path (source_point, destination_point, mesh):
 
@@ -235,6 +312,11 @@ def find_path (source_point, destination_point, mesh):
     detail_points = {}
     source_box = None
     destination_box = None
+    path_found = False
+
+    """
+    Find source and destination boxes
+    """
 
     for box in mesh["boxes"]:
         if box_contains_point(box, source_point):
@@ -253,21 +335,14 @@ def find_path (source_point, destination_point, mesh):
     Run search algorithm
     """
 
-    if astar(detail_points, neighbors, source_box, destination_box, boxes):
-        print("Path found")
+    path_found, path, new_boxes = bidirectional_astar(neighbors, source_box, source_point, destination_box, destination_point, boxes)
+
+    if path_found:
+        print("Path found!")
     else:
-        print("No path found")
-        return path, boxes.keys()
+        print("Path not found!")
 
-    """
-    Path reconstruction
-    """
-
-    path.append(destination_point)
-    path.append(detail_points[destination_box])
-    current_box = boxes[destination_box]
-    while current_box is not None:
-        path.append(detail_points[current_box])
-        current_box = boxes[current_box]
+    if new_boxes:
+        boxes = new_boxes
 
     return path, boxes.keys()
